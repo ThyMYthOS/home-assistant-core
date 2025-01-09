@@ -7,17 +7,13 @@ from pymodbus.client import ModbusTcpClient
 from pystiebeleltron import pystiebeleltron
 import voluptuous as vol
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_NAME, DEVICE_DEFAULT_NAME, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import discovery
 import homeassistant.helpers.config_validation as cv
-from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import Throttle
 
-CONF_HUB = "hub"
-DEFAULT_HUB = "modbus_hub"
-MODBUS_DOMAIN = "modbus"
-DOMAIN = "stiebel_eltron"
+from .const import CONF_HUB, DEFAULT_HUB, DOMAIN, MODBUS_DOMAIN
 
 CONFIG_SCHEMA = vol.Schema(
     {
@@ -36,30 +32,42 @@ _LOGGER = logging.getLogger(__name__)
 MIN_TIME_BETWEEN_UPDATES = timedelta(seconds=30)
 
 
-def setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the STIEBEL ELTRON unit.
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up STIEBEL ELTRON from a config entry."""
+    name = entry.data[CONF_NAME]
+    modbus_client = hass.data[MODBUS_DOMAIN][entry.data[CONF_HUB]]
 
-    Will automatically load climate platform.
-    """
-    name = config[DOMAIN][CONF_NAME]
-    modbus_client = hass.data[MODBUS_DOMAIN][config[DOMAIN][CONF_HUB]]
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = StiebelEltronData(
+        name, modbus_client
+    )
 
-    hass.data[DOMAIN] = {
-        "name": name,
-        "ste_data": StiebelEltronData(name, modbus_client),
-    }
-
-    discovery.load_platform(hass, Platform.CLIMATE, DOMAIN, {}, config)
+    await hass.config_entries.async_forward_entry_setup(entry, Platform.CLIMATE)
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    if unload_ok := await hass.config_entries.async_forward_entry_unload(
+        entry, Platform.CLIMATE
+    ):
+        hass.data[DOMAIN].pop(entry.entry_id)
+
+    return unload_ok
 
 
 class StiebelEltronData:
     """Get the latest data and update the states."""
 
-    def __init__(self, name: str, modbus_client: ModbusTcpClient) -> None:
+    def __init__(self, name, modbus_client: ModbusTcpClient) -> None:
         """Init the STIEBEL ELTRON data object."""
 
+        self._name = name
         self.api = pystiebeleltron.StiebelEltronAPI(modbus_client, 1)
+
+    @property
+    def name(self) -> str:
+        """Return the name of the device."""
+        return self._name
 
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self) -> None:

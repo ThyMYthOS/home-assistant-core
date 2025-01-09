@@ -1,0 +1,20 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
+    },
+    "step": {
+      "user": {
+        "title": "Configure STIEBEL ELTRON",
+        "description": "Set up your STIEBEL ELTRON integration.",
+        "data": {
+          "name": "Device Name",
+          "hub": "Modbus Hub"
+        }
+      }
+    }
+  }
+}

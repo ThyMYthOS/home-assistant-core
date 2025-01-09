@@ -11,14 +11,13 @@ from homeassistant.components.climate import (
     ClimateEntityFeature,
     HVACMode,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
-from . import DOMAIN as STE_DOMAIN, StiebelEltronData
-
-DEPENDENCIES = ["stiebel_eltron"]
+from . import StiebelEltronData
+from .const import DOMAIN as STE_DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,17 +55,15 @@ HA_TO_STE_HVAC = {
 HA_TO_STE_PRESET = {k: i for i, k in STE_TO_HA_PRESET.items()}
 
 
-def setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    config_entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the StiebelEltron platform."""
-    name = hass.data[STE_DOMAIN]["name"]
-    ste_data = hass.data[STE_DOMAIN]["ste_data"]
+    """Set up the StiebelEltron platform from a config entry."""
+    ste_data = hass.data[STE_DOMAIN][config_entry.entry_id]
 
-    add_entities([StiebelEltron(name, ste_data)], True)
+    async_add_entities([StiebelEltron(ste_data)], True)
 
 
 class StiebelEltron(ClimateEntity):
@@ -81,9 +78,9 @@ class StiebelEltron(ClimateEntity):
     )
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-    def __init__(self, name: str, ste_data: StiebelEltronData) -> None:
+    def __init__(self, ste_data: StiebelEltronData) -> None:
         """Initialize the unit."""
-        self._name = name
+        self._name = ste_data.name
         self._target_temperature: float | int | None = None
         self._current_temperature: float | int | None = None
         self._current_humidity: float | int | None = None
@@ -108,7 +105,7 @@ class StiebelEltron(ClimateEntity):
         )
 
     @property
-    def extra_state_attributes(self) -> dict[str, bool | None]:
+    def extra_state_attributes(self) -> dict[str, Any]:
         """Return device specific state attributes."""
         return {"filter_alarm": self._filter_alarm}
 
