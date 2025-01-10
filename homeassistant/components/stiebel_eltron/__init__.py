@@ -19,8 +19,8 @@ CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Schema(
             {
-                vol.Optional(CONF_NAME, default=DEVICE_DEFAULT_NAME): cv.string,
-                vol.Optional(CONF_HUB, default=DEFAULT_HUB): cv.string,
+                vol.Required(CONF_NAME, default=DEVICE_DEFAULT_NAME): cv.string,
+                vol.Required(CONF_HUB, default=DEFAULT_HUB): cv.string,
             }
         )
     },

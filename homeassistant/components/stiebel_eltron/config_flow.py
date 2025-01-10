@@ -45,8 +45,8 @@ class StiebelEltronConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data_schema = vol.Schema(
             {
-                vol.Optional(CONF_NAME, default=DEFAULT_DEVICE_NAME): str,
-                vol.Optional(CONF_HUB, default=DEFAULT_HUB): str,
+                vol.Required(CONF_NAME, default=DEFAULT_DEVICE_NAME): str,
+                vol.Required(CONF_HUB, default=DEFAULT_HUB): str,
             }
         )
 
