@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your Varta Pulse battery",
+        "description": "Please enter the IP address and port of your Varta Pulse battery."
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to the Varta Pulse battery. Please check the IP address and port."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery_soc": {
+        "name": "Battery state of charge",
+        "icon": "mdi:battery"
+      },
+      "battery_power": {
+        "name": "Battery power",
+        "icon": "mdi:flash"
+      },
+      "grid_power": {
+        "name": "Grid power",
+        "icon": "mdi:transmission-tower"
+      }
+    }
+  }
+}

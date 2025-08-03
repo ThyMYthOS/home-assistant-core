@@ -1,0 +1,10 @@
+rules:
+  config-flow: done
+  entity-unique-id: done
+  action-setup:
+    status: exempt
+    comment: Integration does not register custom actions.
+  entity-unavailable: done
+  parallel-updates: done
+  devices: done
+  diagnostics: done
