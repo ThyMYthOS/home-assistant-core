@@ -2,36 +2,19 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 
 @dataclass
-class VartaPulseInfo:
-    """Represents the /cgi/info.js endpoint data from Varta Pulse."""
+class VartaPulseData:
+    """Unified data model for all Varta Pulse endpoint data."""
 
-    data: dict[str, str | int]
-
-
-@dataclass
-class VartaPulseParam:
-    """Represents the /cgi/param endpoint data from Varta Pulse."""
-
-    data: dict[str, str | int]
-
-
-@dataclass
-class VartaPulseEmsData:
-    """Represents the /cgi/ems_data.js endpoint data from Varta Pulse."""
-
+    info: dict[str, str | int]
+    param: dict[str, str | int]
     wr_data: dict[str, str | int | float]
     emeter_data: dict[str, str | int | float]
-    charger_data: dict[str, str | int | float]
-    module_data: list[dict[str, str | int | float]]
-    zeit: str | datetime
-
-
-@dataclass
-class VartaPulseError:
-    """Represents the /cgi/error.js endpoint data from Varta Pulse."""
-
+    charger_data: dict[str, dict | str | int | float]
+    battery_data: list[dict[str, Any]]
+    time: str | datetime
     error_list: list[str]
     na_error_list: list[tuple[int, int]]

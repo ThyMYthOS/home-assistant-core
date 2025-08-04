@@ -12,11 +12,9 @@ from tests.test_util.aiohttp import AiohttpClientMocker
 
 
 @pytest.mark.asyncio
-async def test_user_flow_success(
-    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
-) -> None:
+async def test_user_flow_success(hass: HomeAssistant, varta_http_mocks) -> None:
     """Test successful user config flow."""
-    aioclient_mock.get("http://1.2.3.4:80/cgi/param", text='IP="1.2.3.4";')
+
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -37,7 +35,7 @@ async def test_user_flow_cannot_connect(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
     """Test config flow with connection error."""
-    aioclient_mock.get("http://1.2.3.4:80/cgi/param", status=404)
+    aioclient_mock.get("http://1.2.3.4:80/cgi/info.js", status=404)
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )

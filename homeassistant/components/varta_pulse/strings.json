@@ -3,7 +3,17 @@
     "step": {
       "user": {
         "title": "Connect to your Varta Pulse battery",
-        "description": "Please enter the IP address and port of your Varta Pulse battery."
+        "description": "Please enter the IP address and port of your Varta Pulse battery.",
+        "data": {
+          "host": {
+            "name": "IP address",
+            "description": "The IP address of your Varta Pulse battery."
+          },
+          "port": {
+            "name": "Port",
+            "description": "The port to connect to your Varta Pulse battery."
+          }
+        }
       }
     },
     "error": {

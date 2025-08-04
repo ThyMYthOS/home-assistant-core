@@ -4,17 +4,32 @@ from __future__ import annotations
 
 import re
 
-import aiohttp
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN, ENDPOINT_INFO
 
 VERSION = 1
 MINOR_VERSION = 1
+
+
+class CannotConnect(Exception):
+    """Raised when connection to Varta Pulse fails."""
+
+
+async def validate_input(hass: HomeAssistant, host: str, port: int) -> str:
+    """Test connection to Varta Pulse and return info.js or raise CannotConnect."""
+    session = async_get_clientsession(hass)
+    url = f"http://{host}:{port}{ENDPOINT_INFO}"
+    async with session.get(url, timeout=5) as resp:
+        if resp.status != 200:
+            raise CannotConnect
+        return await resp.text()
 
 
 class VartaPulseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -29,31 +44,18 @@ class VartaPulseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             host = user_input.get(CONF_HOST)
             port = user_input.get(CONF_PORT, 80)
-
-            class CannotConnect(Exception):
-                """Raised when connection to Varta Pulse fails."""
-
             try:
-                async with aiohttp.ClientSession() as session:
-                    url = f"http://{host}:{port}{ENDPOINT_INFO}"
-                    async with session.get(url, timeout=5) as resp:
-                        if resp.status != 200:
-                            raise CannotConnect
-                        info_text = await resp.text()
-                # Parse Battery_Serial from info_text
-                match = re.search(r'Battery_Serial\s*=\s*"([^"]+)";', info_text)
+                info = await validate_input(self.hass, host, port)
+                match = re.search(r'Battery_Serial\s*=\s*"([^"]+)";', info)
                 serial = match.group(1) if match else host
-            except aiohttp.ClientError:
-                errors["base"] = "cannot_connect"
-            except CannotConnect:
-                errors["base"] = "cannot_connect"
-            else:
                 await self.async_set_unique_id(serial)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
                     title=f"Varta Pulse {serial}",
                     data={CONF_HOST: host, CONF_PORT: port},
                 )
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
         return self.async_show_form(
             step_id="user",
             data_schema=self._get_schema(),
