@@ -28,6 +28,58 @@ class DummySession:
                 pass
 
         # Return example data for each endpoint
+        if url.endswith("/cgi/info.js"):
+            return DummyResp(
+                """
+Device_Type = "M-UF.273-00A";
+Device_Serial = "0123456789";
+Device_Description = "VARTA";
+EMS_Serial = "K001234";
+SW_ID_EMS = 0xae;
+HW_ID_EMS = 0x03;
+SW_Version_EMS = "C21010705";
+IP = "192.168.2.12";
+Netmask = "255.255.255.0";
+Gateway = "192.168.2.1";
+DNS = "192.168.2.1";
+Anz_Charger = 1;
+Soll_Charger = 1;
+Serial_WR = "K005678";
+MAC_WR = " 5B68E8";
+SW_ID_WR = 0xac;
+HW_ID_WR = 0x00;
+SW_Version_WR = "C11010503";
+BL_Version_WR = "1.3.0.5";
+Serial_EMeter = "M487654";
+MAC_EMeter = " 0CC200";
+SW_Version_EMeter = "C41000400";
+BL_Version_EMeter = "x.1.0.6";
+HW_ID_EMeter = 0x21;
+IndexMinVersion = 15;
+IndexMaxVersion = 15;
+Charger_Serial = [ "K005678"];
+Charger_MAC = [ " EA559C"];
+SW_ID_Charger = [ 0xA0];
+AppHW_ID_Charger = [ 0x12];
+HW_ID_Charger = [ 0x04];
+SW_Version_Charger = [ "C31010609"];
+BL_Version_Charger = [ "3.0.4"];
+Battery_Serial = "EM048126P3S7BMA2006298096";
+BMS_Serial = "2006110381";
+BMS_SW = "1.0";
+BMS_HW = "0.2";
+BatteryHW = ["0.2"];
+BMS_Type = "7";
+P_EMS_Max = 2500;
+CountryID = 0;
+norm_ext = 0;
+gridcode = 65535;
+BM_Update = ["03.04.2025 13:11:31"];
+BM_UpdateSW = ["1.0.0.20"];
+BM_Production = ["2006298096"];
+LG_Battery_Serial = ["EM048126P3S7xxx2006298096"];
+"""
+            )
         if url.endswith("/cgi/param"):
             return DummyResp(
                 """
@@ -284,6 +336,7 @@ async def test_async_update_data_types(
     assert isinstance(data["ems_data"].wr_data, dict)
     assert isinstance(data["ems_data"].emeter_data, dict)
     assert isinstance(data["ems_data"].charger_data, dict)
+    assert isinstance(data["ems_data"].modules_data, list)
     assert isinstance(data["error"].error_list, list)
     assert isinstance(data["error"].na_error_list, list)
     assert "OnlineStatus" in data["ems_data"].wr_data

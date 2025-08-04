@@ -17,19 +17,19 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    ENDPOINT_EMS_CONF,
     ENDPOINT_EMS_DATA,
     ENDPOINT_ERROR,
+    ENDPOINT_INFO,
     ENDPOINT_PARAM,
 )
-from .models import VartaPulseEmsData, VartaPulseError, VartaPulseParam
+from .models import VartaPulseEmsData, VartaPulseError, VartaPulseInfo, VartaPulseParam
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class VartaPulseCoordinator(DataUpdateCoordinator):
     """Data update coordinator for Varta Pulse battery."""
-
-    EMS_CONF_ENDPOINT = "/cgi/ems_conf.js"
 
     def __init__(self, hass: HomeAssistant, config_entry: ConfigEntry) -> None:
         """Initialize the coordinator.
@@ -48,6 +48,7 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
         self.host = config_entry.data["host"]
         self.port = config_entry.data.get("port", 80)
         self.session = aiohttp.ClientSession()
+        self.info = None
         self.ems_conf = None
 
     async def _async_update_data(self):
@@ -55,8 +56,12 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
         param = None
         ems_data = None
         error = None
+        info = self.info
         ems_conf = self.ems_conf
         try:
+            if info is None:
+                info = await self._fetch_info()
+                self.info = info
             if ems_conf is None:
                 ems_conf = await self._fetch_ems_conf()
                 self.ems_conf = ems_conf
@@ -67,6 +72,7 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
             raise UpdateFailed(f"Error communicating with Varta Pulse: {err}") from err
         else:
             return {
+                "info": info,
                 "param": param,
                 "ems_data": ems_data,
                 "error": error,
@@ -78,11 +84,38 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
         url = f"http://{self.host}:{self.port}{ENDPOINT_PARAM}"
         async with self.session.get(url) as resp:
             text = await resp.text()
-        return VartaPulseParam(data=self._parse_param(text))
+        return self._parse_key_value(text, VartaPulseParam)
+
+    async def _fetch_info(self) -> VartaPulseInfo:
+        """Fetch /cgi/info.js endpoint and parse its content."""
+        url = f"http://{self.host}:{self.port}{ENDPOINT_INFO}"
+        async with self.session.get(url) as resp:
+            text = await resp.text()
+        return self._parse_key_value(text, VartaPulseInfo)
+
+    def _parse_key_value(self, text: str, model_cls):
+        """Parse key-value pairs from info/param endpoints into model."""
+
+        def parse_line(line: str) -> tuple[str, str | int] | None:
+            if "=" not in line:
+                return None
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip(' ;"')
+            with contextlib.suppress(ValueError):
+                value = int(value)
+            return key, value
+
+        data = {
+            k: v
+            for k, v in (parse_line(line) for line in text.splitlines())
+            if k is not None and v is not None
+        }
+        return model_cls(data=data)
 
     async def _fetch_ems_conf(self) -> dict[str, list[str]]:
         """Fetch /cgi/ems_conf.js and parse value names."""
-        url = f"http://{self.host}:{self.port}{self.EMS_CONF_ENDPOINT}"
+        url = f"http://{self.host}:{self.port}{ENDPOINT_EMS_CONF}"
         async with self.session.get(url) as resp:
             text = await resp.text()
         # Parse JS arrays
@@ -118,21 +151,6 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
             text = await resp.text()
         return self._parse_error(text)
 
-    def _parse_param(self, text: str) -> dict[str, str | int]:
-        """Parse /cgi/param response into a dictionary."""
-
-        def parse_param_line(line: str) -> tuple[str, str | int] | None:
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip(' ;"')
-            # Try to convert to int if possible
-            with contextlib.suppress(ValueError):
-                value = int(value)
-            return key, value
-
-        params = (parse_param_line(line) for line in text.splitlines() if "=" in line)
-        return {k: v for k, v in params if k is not None and v is not None}
-
     def _parse_ems_data(
         self, text: str, ems_conf: dict[str, list[str]]
     ) -> VartaPulseEmsData:
@@ -151,12 +169,16 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
         wr_names = ems_conf.get("WR_Conf", [])
         emeter_names = ems_conf.get("EMETER_Conf", [])
         charger_names = ems_conf.get("Charger_Conf", [])
+        module_names = ems_conf.get("Modul_Conf", [])
         wr_values = parse_array(wr_data.group(1)) if wr_data else []
         emeter_values = parse_array(emeter_data.group(1)) if emeter_data else []
         charger_values = parse_array(charger_data.group(1)) if charger_data else []
         wr_dict = dict(zip(wr_names, wr_values, strict=True))
         emeter_dict = dict(zip(emeter_names, emeter_values, strict=True))
         charger_dict = dict(zip(charger_names, charger_values, strict=True))
+        modules_list = [
+            dict(zip(cv, module_names, strict=True)) for cv in charger_values[1:]
+        ]
 
         # Parse zeit as datetime if possible, else fallback to string
         zeit = zeit.group(1) if zeit else ""
@@ -168,6 +190,7 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
             wr_data=wr_dict,
             emeter_data=emeter_dict,
             charger_data=charger_dict,
+            modules_data=modules_list,
         )
 
     def _parse_error(self, text: str) -> VartaPulseError:

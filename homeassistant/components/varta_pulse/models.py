@@ -5,6 +5,13 @@ from datetime import datetime
 
 
 @dataclass
+class VartaPulseInfo:
+    """Represents the /cgi/info.js endpoint data from Varta Pulse."""
+
+    data: dict[str, str | int]
+
+
+@dataclass
 class VartaPulseParam:
     """Represents the /cgi/param endpoint data from Varta Pulse."""
 

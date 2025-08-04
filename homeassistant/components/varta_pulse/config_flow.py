@@ -11,7 +11,7 @@ from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PORT
 
-from .const import DOMAIN
+from .const import DOMAIN, ENDPOINT_INFO
 
 VERSION = 1
 MINOR_VERSION = 1
@@ -35,13 +35,13 @@ class VartaPulseConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             try:
                 async with aiohttp.ClientSession() as session:
-                    url = f"http://{host}:{port}/cgi/param"
+                    url = f"http://{host}:{port}{ENDPOINT_INFO}"
                     async with session.get(url, timeout=5) as resp:
                         if resp.status != 200:
                             raise CannotConnect
-                        param_text = await resp.text()
-                # Parse BATT_SER from param_text
-                match = re.search(r'BATT_SER\s*=\s*"([^"]+)";', param_text)
+                        info_text = await resp.text()
+                # Parse Battery_Serial from info_text
+                match = re.search(r'Battery_Serial\s*=\s*"([^"]+)";', info_text)
                 serial = match.group(1) if match else host
             except aiohttp.ClientError:
                 errors["base"] = "cannot_connect"
