@@ -158,14 +158,14 @@ class VartaPulseCoordinator(DataUpdateCoordinator):
         url = f"http://{self.host}:{self.port}{ENDPOINT_PARAM}"
         async with self.session.get(url) as resp:
             text = await resp.text()
-        return _parse_key_value(text, type("Param", (), {}))
+        return _parse_key_value(text)
 
     async def _fetch_info(self) -> dict[str, str | int]:
         """Fetch /cgi/info.js endpoint and parse its content."""
         url = f"http://{self.host}:{self.port}{ENDPOINT_INFO}"
         async with self.session.get(url) as resp:
             text = await resp.text()
-        return _parse_key_value(text, type("Info", (), {}))
+        return _parse_key_value(text)
 
     async def _fetch_ems_conf(self) -> dict[str, list[str]]:
         """Fetch /cgi/ems_conf.js and parse value names."""

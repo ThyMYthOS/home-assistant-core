@@ -26,7 +26,7 @@ async def test_user_flow_success(hass: HomeAssistant, varta_http_mocks) -> None:
         result["flow_id"], user_input=user_input
     )
     assert result2["type"] == FlowResultType.CREATE_ENTRY
-    assert result2["title"] == "Varta Pulse 1.2.3.4"
+    assert result2["title"] == "Varta Pulse EM012345P3S7BMA2006123456"
     assert result2["data"] == user_input
 
 

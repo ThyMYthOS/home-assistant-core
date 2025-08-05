@@ -12,8 +12,6 @@ async def test_async_update_data_types(
     hass: HomeAssistant, varta_config_entry: ConfigEntry, varta_http_mocks
 ) -> None:
     """Test coordinator _async_update_data returns correct types."""
-    varta_http_mocks()
-    
     coordinator = VartaPulseCoordinator(hass, varta_config_entry)
     data = await coordinator._async_update_data()
     assert isinstance(data["param"].data, dict)

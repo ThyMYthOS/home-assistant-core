@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -18,41 +19,63 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .coordinator import VartaPulseCoordinator
 from .entity import VartaPulseEntity
 
-SENSORS = [
-    SensorEntityDescription(
+
+class VartaPulseSensorEntityDescription(SensorEntityDescription):
+    """Custom sensor entity description for Varta Pulse with value_fn und attributes_fn."""
+
+    def __init__(
+        self,
+        key: str,
+        name: str,
+        device_class: SensorDeviceClass | None = None,
+        state_class: SensorStateClass | None = None,
+        entity_category: EntityCategory | None = None,
+        icon: str | None = None,
+        value_fn: Callable[[dict], Any] | None = None,
+        attributes_fn: Callable[[dict], dict[str, Any] | None] | None = None,
+    ) -> None:
+        """Initialize VartaPulseSensorEntityDescription."""
+        super().__init__(
+            key=key,
+            name=name,
+            device_class=device_class,
+            state_class=state_class,
+            entity_category=entity_category,
+            icon=icon,
+        )
+        self.value_fn = value_fn
+        self.attributes_fn = attributes_fn
+
+
+VARTA_PULSE_SENSORS = [
+    VartaPulseSensorEntityDescription(
         key="battery_soc",
         name="Battery state of charge",
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:battery",
-        value_fn=lambda data: data["ems_data"].charger_data.get("SOC_GS")
-        if "ems_data" in data and "charger_data" in data["ems_data"]
-        else None,
+        value_fn=lambda data: data["ems_data"].charger_data.get("SOC_GS"),
     ),
-    SensorEntityDescription(
+    VartaPulseSensorEntityDescription(
         key="battery_power",
         name="Battery power",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:flash",
-        value_fn=lambda data: data["ems_data"].wr_data.get("PSoll")
-        if "ems_data" in data and "wr_data" in data["ems_data"]
-        else None,
+        value_fn=lambda data: data["ems_data"].wr_data.get("PSoll"),
     ),
-    SensorEntityDescription(
+    VartaPulseSensorEntityDescription(
         key="grid_power",
         name="Grid power",
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         entity_category=EntityCategory.DIAGNOSTIC,
         icon="mdi:transmission-tower",
-        value_fn=lambda data: data["ems_data"].emeter_data.get("I EMeter L3")
-        if "ems_data" in data and "emeter_data" in data["ems_data"]
-        else None,
+        value_fn=lambda data: data["ems_data"].emeter_data.get("I EMeter L3"),
     ),
-    SensorEntityDescription(
+    VartaPulseSensorEntityDescription(
         key="module_voltage",
         name="Module voltage",
         device_class=SensorDeviceClass.VOLTAGE,
@@ -68,6 +91,19 @@ SENSORS = [
         and data["ems_data"].charger_data["BattData"]
         and len(data["ems_data"].charger_data["BattData"][0]) > 8
         else None,
+        attributes_fn=lambda data: (
+            None
+            if "ems_data" not in data
+            or "charger_data" not in data["ems_data"]
+            or "BattData" not in data["ems_data"].charger_data
+            or not data["ems_data"].charger_data["BattData"]
+            else {
+                f"cell_voltage_{i + 1}": v
+                for i, v in enumerate(
+                    data["ems_data"].charger_data["BattData"][0][29:43]
+                )
+            }
+        ),
     ),
 ]
 
@@ -79,7 +115,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up Varta Pulse sensor entities from a config entry."""
     coordinator = entry.runtime_data
-    entities = [VartaPulseSensor(coordinator, entry.entry_id, desc) for desc in SENSORS]
+    entities = [
+        VartaPulseSensor(coordinator, entry.entry_id, desc)
+        for desc in VARTA_PULSE_SENSORS
+    ]
     async_add_entities(entities)
 
 
@@ -90,13 +129,13 @@ class VartaPulseSensor(VartaPulseEntity, SensorEntity):
         self,
         coordinator: VartaPulseCoordinator,
         unique_id: str,
-        description: SensorEntityDescription,
+        description: VartaPulseSensorEntityDescription,
     ) -> None:
         """Initialize Varta Pulse sensor entity."""
         super().__init__(
             coordinator, f"{unique_id}-{description.key}", description.name
         )
-        self.entity_description: SensorEntityDescription = description
+        self.entity_description: VartaPulseSensorEntityDescription = description
         self._attr_entity_category: EntityCategory | None = description.entity_category
         self._attr_device_class: SensorDeviceClass | None = description.device_class
         self._attr_icon: str | None = description.icon
@@ -111,17 +150,10 @@ class VartaPulseSensor(VartaPulseEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        """Return cell voltages as extra attributes for module voltage sensor."""
-        if self.entity_description.key != "module_voltage":
-            return None
-        data = self.coordinator.data if self.coordinator.data else {}
-
-        batt_data = data["ems_data"].charger_data.get("BattData", [None])[0]
-        if batt_data:
-            # Cell voltages are at indexes 29-42 in Modul_Conf
-            cell_voltages = batt_data[29:43]
-            return {f"cell_voltage_{i + 1}": v for i, v in enumerate(cell_voltages)}
-
+        """Return extra state attributes for the sensor (z. B. Zellspannungen)."""
+        if self.entity_description.attributes_fn:
+            data = self.coordinator.data if self.coordinator.data else {}
+            return self.entity_description.attributes_fn(data)
         return None
 
     @property
