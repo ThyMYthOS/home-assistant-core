@@ -18,6 +18,7 @@ from homeassistant.components.sensor import (
 from homeassistant.components.switch import (
     DEVICE_CLASSES_SCHEMA as SWITCH_DEVICE_CLASSES_SCHEMA,
 )
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_ADDRESS,
     CONF_BINARY_SENSORS,
@@ -566,4 +567,29 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async_register_admin_service(hass, DOMAIN, SERVICE_RELOAD, _reload_config)
 
+    # Import each hub as a config entry for device registration
+    for hub_config in config[DOMAIN]:
+        hub_name = hub_config[CONF_NAME]
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data={"name": hub_name},
+            )
+        )
+
     return await async_modbus_setup(hass, config)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Modbus from a config entry (created via YAML import)."""
+    hub_name = entry.data["name"]
+    if DATA_MODBUS_HUBS in hass.data and hub_name in hass.data[DATA_MODBUS_HUBS]:
+        hub: ModbusHub = hass.data[DATA_MODBUS_HUBS][hub_name]
+        hub.register_devices(entry.entry_id)
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a Modbus config entry."""
+    return True

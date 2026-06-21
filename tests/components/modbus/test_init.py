@@ -116,7 +116,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
@@ -1632,3 +1632,64 @@ async def test_not_zero_value() -> None:
 
     with pytest.raises(vol.Invalid):
         not_zero_value(0, "Value cannot be zero.")
+
+
+async def test_device_registration(
+    hass: HomeAssistant, mock_pymodbus: mock.AsyncMock
+) -> None:
+    """Test that hub and slave devices are registered."""
+    config = {
+        DOMAIN: [
+            {
+                CONF_TYPE: TCP,
+                CONF_HOST: TEST_MODBUS_HOST,
+                CONF_PORT: TEST_PORT_TCP,
+                CONF_NAME: TEST_MODBUS_NAME,
+                CONF_SENSORS: [
+                    {
+                        CONF_NAME: "sensor1",
+                        CONF_ADDRESS: 100,
+                        CONF_SLAVE: 1,
+                    },
+                    {
+                        CONF_NAME: "sensor2",
+                        CONF_ADDRESS: 200,
+                        CONF_SLAVE: 2,
+                    },
+                    {
+                        CONF_NAME: "sensor3",
+                        CONF_ADDRESS: 300,
+                        CONF_SLAVE: 1,
+                    },
+                ],
+            }
+        ]
+    }
+    assert await async_setup_component(hass, DOMAIN, config)
+    await hass.async_block_till_done()
+
+    # Verify devices are registered
+    dev_reg = dr.async_get(hass)
+
+    # Hub device
+    hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, TEST_MODBUS_NAME)})
+    assert hub_device is not None
+    assert hub_device.name == f"Modbus Hub: {TEST_MODBUS_NAME}"
+    assert hub_device.manufacturer == "Modbus"
+    assert hub_device.model == TCP
+
+    # Slave device 1
+    slave1_device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_1")}
+    )
+    assert slave1_device is not None
+    assert slave1_device.name == f"{TEST_MODBUS_NAME} Device 1"
+    assert slave1_device.via_device_id == hub_device.id
+
+    # Slave device 2
+    slave2_device = dev_reg.async_get_device(
+        identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_2")}
+    )
+    assert slave2_device is not None
+    assert slave2_device.name == f"{TEST_MODBUS_NAME} Device 2"
+    assert slave2_device.via_device_id == hub_device.id

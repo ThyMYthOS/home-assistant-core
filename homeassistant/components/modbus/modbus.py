@@ -16,17 +16,24 @@ import voluptuous as vol
 
 from homeassistant.const import (
     ATTR_STATE,
+    CONF_BINARY_SENSORS,
+    CONF_COVERS,
     CONF_DELAY,
     CONF_HOST,
+    CONF_LIGHTS,
     CONF_METHOD,
     CONF_NAME,
     CONF_PORT,
+    CONF_SENSORS,
+    CONF_SLAVE,
+    CONF_SWITCHES,
     CONF_TIMEOUT,
     CONF_TYPE,
     EVENT_HOMEASSISTANT_STOP,
 )
 from homeassistant.core import Event, HomeAssistant, ServiceCall
-from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
@@ -49,6 +56,7 @@ from .const import (
     CALL_TYPE_WRITE_REGISTERS,
     CONF_BAUDRATE,
     CONF_BYTESIZE,
+    CONF_DEVICE_ADDRESS,
     CONF_MSG_WAIT,
     CONF_PARITY,
     CONF_STOPBITS,
@@ -257,6 +265,7 @@ class ModbusHub:
         self.name = client_config[CONF_NAME]
         self._config_type = client_config[CONF_TYPE]
         self.config_delay = client_config[CONF_DELAY]
+        self._config = client_config
         self._pb_request: dict[str, RunEntry] = {}
         self._connect_task: asyncio.Task
         self._last_log_error: str = ""
@@ -299,6 +308,65 @@ class ModbusHub:
             self._msg_wait = 30 / 1000
         else:
             self._msg_wait = 0
+
+    @property
+    def hub_device_info(self) -> DeviceInfo:
+        """Return device info for the hub."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.name)},
+            name=f"Modbus Hub: {self.name}",
+            manufacturer="Modbus",
+            model=self._config_type,
+        )
+
+    def get_device_info_for_slave(self, slave_id: int) -> DeviceInfo:
+        """Return device info for a slave device."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{self.name}_{slave_id}")},
+            name=f"{self.name} Device {slave_id}",
+            manufacturer="Modbus",
+            via_device=(DOMAIN, self.name),
+        )
+
+    def register_devices(self, config_entry_id: str) -> None:
+        """Register hub and slave devices in the device registry."""
+        dev_reg = dr.async_get(self.hass)
+
+        # Register the hub device
+        dev_reg.async_get_or_create(
+            config_entry_id=config_entry_id,
+            identifiers={(DOMAIN, self.name)},
+            name=f"Modbus Hub: {self.name}",
+            manufacturer="Modbus",
+            model=self._config_type,
+        )
+
+        # Collect all unique slave IDs from entity configs
+        slave_ids: set[int] = set()
+        entity_platforms = (
+            CONF_BINARY_SENSORS,
+            CONF_SENSORS,
+            CONF_SWITCHES,
+            CONF_LIGHTS,
+            CONF_COVERS,
+        )
+        for conf_key in (*entity_platforms, "climates", "fans"):
+            if conf_key in self._config:
+                for entity_conf in self._config[conf_key]:
+                    slave_id = entity_conf.get(
+                        CONF_SLAVE, entity_conf.get(CONF_DEVICE_ADDRESS, 1)
+                    )
+                    slave_ids.add(slave_id)
+
+        # Register sub-devices for each slave
+        for slave_id in sorted(slave_ids):
+            dev_reg.async_get_or_create(
+                config_entry_id=config_entry_id,
+                identifiers={(DOMAIN, f"{self.name}_{slave_id}")},
+                name=f"{self.name} Device {slave_id}",
+                manufacturer="Modbus",
+                via_device=(DOMAIN, self.name),
+            )
 
     def _log_error(self, text: str) -> None:
         if text == self._last_log_error:
