@@ -91,6 +91,7 @@ class ModbusBaseEntity(Entity):
         self._attr_unique_id = entry.get(CONF_UNIQUE_ID)
         self._attr_name = entry[CONF_NAME]
         self._attr_device_class = entry.get(CONF_DEVICE_CLASS)
+        self._attr_device_info = hub.get_device_info_for_slave(self._device_address)
 
         self._min_value = entry.get(CONF_MIN_VALUE)
         self._max_value = entry.get(CONF_MAX_VALUE)

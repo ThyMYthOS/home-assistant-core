@@ -27,6 +27,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.discovery import async_load_platform
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
@@ -254,9 +255,10 @@ class ModbusHub:
         self._lock = asyncio.Lock()
         self.event_connected = asyncio.Event()
         self.hass = hass
-        self.name = client_config[CONF_NAME]
-        self._config_type = client_config[CONF_TYPE]
-        self.config_delay = client_config[CONF_DELAY]
+        self.name = ""
+        self._config_type = ""
+        self.config_delay = 0
+        self._config: dict[str, Any] = {}
         self._pb_request: dict[str, RunEntry] = {}
         self._connect_task: asyncio.Task
         self._last_log_error: str = ""
@@ -266,13 +268,21 @@ class ModbusHub:
             UDP: AsyncModbusUdpClient,
             RTUOVERTCP: AsyncModbusTcpClient,
         }
+        self._pb_params: dict[str, Any] = {}
+        self._apply_client_config(client_config)
+
+    def _apply_client_config(self, client_config: dict[str, Any]) -> None:
+        """Apply client connection settings."""
+        self.name = client_config[CONF_NAME]
+        self._config = client_config.copy()
+        self._config_type = client_config[CONF_TYPE]
+        self.config_delay = client_config[CONF_DELAY]
         self._pb_params = {
             "port": client_config[CONF_PORT],
             "timeout": client_config[CONF_TIMEOUT],
             "retries": 3,
         }
         if self._config_type == SERIAL:
-            # serial configuration
             if client_config[CONF_METHOD] == "ascii":
                 self._pb_params["framer"] = FramerType.ASCII
             else:
@@ -286,7 +296,6 @@ class ModbusHub:
                 }
             )
         else:
-            # network configuration
             self._pb_params["host"] = client_config[CONF_HOST]
             if self._config_type == RTUOVERTCP:
                 self._pb_params["framer"] = FramerType.RTU
@@ -299,6 +308,22 @@ class ModbusHub:
             self._msg_wait = 30 / 1000
         else:
             self._msg_wait = 0
+
+    def get_device_info_for_slave(self, slave_id: int) -> DeviceInfo:
+        """Return device info for a slave device."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, f"{self.name}_{slave_id}")},
+            name=f"{self.name} Device {slave_id}",
+            manufacturer="Modbus",
+        )
+
+    async def async_reconfigure(self, client_config: dict[str, Any]) -> None:
+        """Apply updated connection settings to the live hub."""
+        merged_config = self._config | client_config
+        if merged_config == self._config:
+            return
+        self._apply_client_config(merged_config)
+        await self.async_restart()
 
     def _log_error(self, text: str) -> None:
         if text == self._last_log_error:

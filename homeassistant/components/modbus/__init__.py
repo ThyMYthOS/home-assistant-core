@@ -18,6 +18,7 @@ from homeassistant.components.sensor import (
 from homeassistant.components.switch import (
     DEVICE_CLASSES_SCHEMA as SWITCH_DEVICE_CLASSES_SCHEMA,
 )
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import (
     CONF_ADDRESS,
     CONF_BINARY_SENSORS,
@@ -151,6 +152,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_TEMP_UNIT,
     DOMAIN,
+    HUB_ENTRY_DATA_KEYS,
     RTUOVERTCP,
     SERIAL,
     TCP,
@@ -173,6 +175,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 BASE_SCHEMA = vol.Schema({vol.Optional(CONF_NAME, default=DEFAULT_HUB): cv.string})
+
+
+def _hub_entry_data(hub_config: dict) -> dict:
+    """Return the config-entry data stored for a hub connection."""
+    return {key: hub_config[key] for key in HUB_ENTRY_DATA_KEYS if key in hub_config}
 
 
 BASE_COMPONENT_SCHEMA = vol.Schema(
@@ -566,4 +573,50 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async_register_admin_service(hass, DOMAIN, SERVICE_RELOAD, _reload_config)
 
+    existing_entries = {
+        entry.unique_id: entry
+        for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.unique_id is not None
+    }
+
+    # Import each hub as a config entry for hub reconfiguration
+    for hub_config in config[DOMAIN]:
+        hub_name = hub_config[CONF_NAME]
+        entry_data = _hub_entry_data(hub_config)
+        if existing_entry := existing_entries.get(hub_name):
+            merged_entry_data = entry_data | dict(existing_entry.data)
+            if merged_entry_data != dict(existing_entry.data):
+                hass.config_entries.async_update_entry(
+                    existing_entry, data=merged_entry_data
+                )
+            hub_config.update(
+                {
+                    key: value
+                    for key, value in merged_entry_data.items()
+                    if key != CONF_NAME
+                }
+            )
+            continue
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": SOURCE_IMPORT},
+                data=entry_data,
+            )
+        )
+
     return await async_modbus_setup(hass, config)
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up Modbus from a config entry."""
+    hub_name = entry.data["name"]
+    if DATA_MODBUS_HUBS in hass.data and hub_name in hass.data[DATA_MODBUS_HUBS]:
+        hub: ModbusHub = hass.data[DATA_MODBUS_HUBS][hub_name]
+        await hub.async_reconfigure(dict(entry.data))
+    return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a Modbus config entry."""
+    return True
