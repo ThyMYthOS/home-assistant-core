@@ -1,12 +1,31 @@
 {
   "config": {
     "abort": {
-      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]"
+      "already_configured": "[%key:common::config_flow::abort::already_configured_service%]",
+      "reconfigure_successful": "[%key:common::config_flow::abort::reconfigure_successful%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]"
     },
     "step": {
       "import": {
         "description": "Modbus hub {name} imported from YAML configuration.",
         "title": "Import Modbus hub"
+      },
+      "reconfigure": {
+        "data": {
+          "baudrate": "Baud rate",
+          "bytesize": "Byte size",
+          "delay": "Startup delay",
+          "host": "[%key:common::config_flow::data::host%]",
+          "message_wait_milliseconds": "Message wait time",
+          "method": "Method",
+          "parity": "Parity",
+          "port": "[%key:common::config_flow::data::port%]",
+          "stopbits": "Stop bits",
+          "timeout": "Timeout"
+        },
+        "description": "Update connection settings for Modbus hub {name}."
       }
     }
   },

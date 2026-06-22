@@ -80,6 +80,7 @@ from homeassistant.components.modbus.const import (
     UDP,
     DataType,
 )
+from homeassistant.components.modbus.modbus import DATA_MODBUS_HUBS
 from homeassistant.components.modbus.validators import (
     check_config,
     duplicate_fan_mode_validator,
@@ -92,6 +93,7 @@ from homeassistant.components.modbus.validators import (
     struct_validator,
 )
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.config_entries import SOURCE_RECONFIGURE
 from homeassistant.const import (
     ATTR_STATE,
     CONF_ADDRESS,
@@ -109,6 +111,7 @@ from homeassistant.const import (
     CONF_STRUCTURE,
     CONF_TIMEOUT,
     CONF_TYPE,
+    CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_STOP,
     SERVICE_RELOAD,
     STATE_ON,
@@ -116,6 +119,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
@@ -1634,10 +1638,10 @@ async def test_not_zero_value() -> None:
         not_zero_value(0, "Value cannot be zero.")
 
 
-async def test_device_registration(
+async def test_hub_connection_is_not_registered_as_device(
     hass: HomeAssistant, mock_pymodbus: mock.AsyncMock
 ) -> None:
-    """Test that hub and slave devices are registered."""
+    """Test that the Modbus connection is not registered as a device."""
     config = {
         DOMAIN: [
             {
@@ -1668,28 +1672,124 @@ async def test_device_registration(
     assert await async_setup_component(hass, DOMAIN, config)
     await hass.async_block_till_done()
 
-    # Verify devices are registered
     dev_reg = dr.async_get(hass)
-
-    # Hub device
-    hub_device = dev_reg.async_get_device(identifiers={(DOMAIN, TEST_MODBUS_NAME)})
-    assert hub_device is not None
-    assert hub_device.name == f"Modbus Hub: {TEST_MODBUS_NAME}"
-    assert hub_device.manufacturer == "Modbus"
-    assert hub_device.model == TCP
-
-    # Slave device 1
-    slave1_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_1")}
+    assert dev_reg.async_get_device(identifiers={(DOMAIN, TEST_MODBUS_NAME)}) is None
+    assert (
+        dev_reg.async_get_device(identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_1")})
+        is None
     )
-    assert slave1_device is not None
-    assert slave1_device.name == f"{TEST_MODBUS_NAME} Device 1"
-    assert slave1_device.via_device_id == hub_device.id
-
-    # Slave device 2
-    slave2_device = dev_reg.async_get_device(
-        identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_2")}
+    assert (
+        dev_reg.async_get_device(identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_2")})
+        is None
     )
-    assert slave2_device is not None
-    assert slave2_device.name == f"{TEST_MODBUS_NAME} Device 2"
-    assert slave2_device.via_device_id == hub_device.id
+
+
+async def test_unique_id_entities_do_not_create_modbus_devices(
+    hass: HomeAssistant, mock_pymodbus: mock.AsyncMock
+) -> None:
+    """Test that unique-id entities still do not create Modbus devices."""
+    config = {
+        DOMAIN: [
+            {
+                CONF_TYPE: TCP,
+                CONF_HOST: TEST_MODBUS_HOST,
+                CONF_PORT: TEST_PORT_TCP,
+                CONF_NAME: TEST_MODBUS_NAME,
+                CONF_SENSORS: [
+                    {
+                        CONF_NAME: "sensor1",
+                        CONF_ADDRESS: 100,
+                        CONF_SLAVE: 1,
+                        CONF_UNIQUE_ID: "sensor1",
+                    },
+                    {
+                        CONF_NAME: "sensor2",
+                        CONF_ADDRESS: 200,
+                        CONF_SLAVE: 2,
+                        CONF_UNIQUE_ID: "sensor2",
+                    },
+                    {
+                        CONF_NAME: "sensor3",
+                        CONF_ADDRESS: 300,
+                        CONF_SLAVE: 1,
+                        CONF_UNIQUE_ID: "sensor3",
+                    },
+                ],
+            }
+        ]
+    }
+    assert await async_setup_component(hass, DOMAIN, config)
+    await hass.async_block_till_done()
+
+    dev_reg = dr.async_get(hass)
+    assert dev_reg.async_get_device(identifiers={(DOMAIN, TEST_MODBUS_NAME)}) is None
+
+    assert (
+        dev_reg.async_get_device(identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_1")})
+        is None
+    )
+    assert (
+        dev_reg.async_get_device(identifiers={(DOMAIN, f"{TEST_MODBUS_NAME}_2")})
+        is None
+    )
+
+
+async def test_reconfigure_updates_hub_connection(
+    hass: HomeAssistant, mock_pymodbus: mock.AsyncMock
+) -> None:
+    """Test reconfiguring a Modbus hub connection."""
+    config = {
+        DOMAIN: [
+            {
+                CONF_TYPE: TCP,
+                CONF_HOST: TEST_MODBUS_HOST,
+                CONF_PORT: TEST_PORT_TCP,
+                CONF_NAME: TEST_MODBUS_NAME,
+                CONF_TIMEOUT: 3,
+                CONF_SENSORS: [
+                    {
+                        CONF_NAME: "sensor1",
+                        CONF_ADDRESS: 100,
+                    }
+                ],
+            }
+        ]
+    }
+    assert await async_setup_component(hass, DOMAIN, config)
+    await hass.async_block_till_done()
+
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_RECONFIGURE, "entry_id": entry.entry_id},
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_HOST: "127.0.0.2",
+            CONF_PORT: 1502,
+            CONF_TIMEOUT: 5,
+            CONF_DELAY: 1,
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+
+    updated_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert updated_entry is not None
+    assert updated_entry.data[CONF_HOST] == "127.0.0.2"
+    assert updated_entry.data[CONF_PORT] == 1502
+    assert updated_entry.data[CONF_TIMEOUT] == 5
+    assert updated_entry.data[CONF_DELAY] == 1
+
+    hub = hass.data[DATA_MODBUS_HUBS][TEST_MODBUS_NAME]
+    assert hub._pb_params["host"] == "127.0.0.2"
+    assert hub._pb_params["port"] == 1502
+    assert hub._pb_params["timeout"] == 5
+    assert hub.config_delay == 1
+    assert mock_pymodbus.close.called

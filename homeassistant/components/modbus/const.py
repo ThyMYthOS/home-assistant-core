@@ -7,9 +7,16 @@ from homeassistant.const import (
     CONF_ADDRESS,
     CONF_BINARY_SENSORS,
     CONF_COVERS,
+    CONF_DELAY,
+    CONF_HOST,
     CONF_LIGHTS,
+    CONF_METHOD,
+    CONF_NAME,
+    CONF_PORT,
     CONF_SENSORS,
     CONF_SWITCHES,
+    CONF_TIMEOUT,
+    CONF_TYPE,
     Platform,
 )
 
@@ -164,6 +171,21 @@ DEFAULT_HVAC_ON_VALUE = 1
 DEFAULT_HVAC_OFF_VALUE = 0
 MODBUS_DOMAIN = "modbus"
 DOMAIN = "modbus"
+
+HUB_ENTRY_DATA_KEYS = (
+    CONF_NAME,
+    CONF_TYPE,
+    CONF_HOST,
+    CONF_PORT,
+    CONF_TIMEOUT,
+    CONF_BAUDRATE,
+    CONF_BYTESIZE,
+    CONF_METHOD,
+    CONF_PARITY,
+    CONF_STOPBITS,
+    CONF_DELAY,
+    CONF_MSG_WAIT,
+)
 
 ACTIVE_SCAN_INTERVAL = 2  # limit to force an extra update
 
