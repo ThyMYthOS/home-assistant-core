@@ -23,6 +23,7 @@ from homeassistant.const import (
     STATE_ON,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import Entity, ToggleEntity
 from homeassistant.helpers.event import async_call_later
@@ -60,10 +61,20 @@ from .const import (
     CONF_ZERO_SUPPRESS,
     DEFAULT_OFFSET,
     DEFAULT_SCALE,
+    DOMAIN,
     SIGNAL_STOP_ENTITY,
     DataType,
 )
 from .modbus import ModbusHub
+
+
+def get_device_info_for_slave(hub_name: str, slave: int) -> DeviceInfo:
+    """Return device info for a Modbus slave device."""
+    unit = f"{hub_name}_unit{slave}"
+    return DeviceInfo(
+        identifiers={(DOMAIN, unit)},
+        name=unit,
+    )
 
 
 class ModbusBaseEntity(Entity):
@@ -90,6 +101,12 @@ class ModbusBaseEntity(Entity):
         self._cancel_call: Callable[[], None] | None = None
         self._attr_unique_id = entry.get(CONF_UNIQUE_ID)
         self._attr_name = entry[CONF_NAME]
+        # Keep the entity_id derived from the entity name only, so attaching a
+        # slave device does not prefix it with the device name.
+        self.internal_integration_suggested_object_id = self._attr_name
+        self._attr_device_info = get_device_info_for_slave(
+            hub.name, self._device_address
+        )
         self._attr_device_class = entry.get(CONF_DEVICE_CLASS)
 
         self._min_value = entry.get(CONF_MIN_VALUE)

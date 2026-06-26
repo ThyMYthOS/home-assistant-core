@@ -18,6 +18,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import (
@@ -110,7 +111,8 @@ class ModbusBinarySensor(ModbusBaseEntity, RestoreEntity, BinarySensorEntity):
         )
 
         return [
-            SlaveSensor(self._coordinator, idx, entry) for idx in range(slave_count)
+            SlaveSensor(self._coordinator, idx, entry, self._attr_device_info)
+            for idx in range(slave_count)
         ]
 
     @override
@@ -155,10 +157,13 @@ class SlaveSensor(
         coordinator: DataUpdateCoordinator[list[int] | None],
         idx: int,
         entry: dict[str, Any],
+        device_info: DeviceInfo | None,
     ) -> None:
         """Initialize the Modbus binary sensor."""
         idx += 1
         self._attr_name = f"{entry[CONF_NAME]} {idx}"
+        self.internal_integration_suggested_object_id = self._attr_name
+        self._attr_device_info = device_info
         self._attr_device_class = entry.get(CONF_DEVICE_CLASS)
         self._attr_unique_id = entry.get(CONF_UNIQUE_ID)
         if self._attr_unique_id:

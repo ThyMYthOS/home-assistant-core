@@ -109,6 +109,7 @@ from homeassistant.const import (
     CONF_STRUCTURE,
     CONF_TIMEOUT,
     CONF_TYPE,
+    CONF_UNIQUE_ID,
     EVENT_HOMEASSISTANT_STOP,
     SERVICE_RELOAD,
     STATE_ON,
@@ -116,7 +117,7 @@ from homeassistant.const import (
     STATE_UNKNOWN,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 
@@ -792,6 +793,63 @@ async def test_no_duplicate_names(hass: HomeAssistant, do_config) -> None:
 async def test_config_modbus(hass: HomeAssistant, mock_modbus_with_pymodbus) -> None:
     """Run configuration test for modbus."""
     assert len(hass.data[DOMAIN])
+
+
+async def test_import_creates_devices_per_slave(
+    hass: HomeAssistant,
+    device_registry: dr.DeviceRegistry,
+    mock_pymodbus,
+) -> None:
+    """Verify YAML import creates one flat device per slave under the hub entry."""
+    config = {
+        DOMAIN: [
+            {
+                CONF_TYPE: TCP,
+                CONF_HOST: TEST_MODBUS_HOST,
+                CONF_PORT: TEST_PORT_TCP,
+                CONF_NAME: TEST_MODBUS_NAME,
+                CONF_SENSORS: [
+                    {
+                        CONF_NAME: "sensor_unit1",
+                        CONF_ADDRESS: 51,
+                        CONF_SLAVE: 1,
+                        CONF_UNIQUE_ID: "sensor_unit1",
+                    },
+                    {
+                        CONF_NAME: "sensor_unit2",
+                        CONF_ADDRESS: 52,
+                        CONF_SLAVE: 2,
+                        CONF_UNIQUE_ID: "sensor_unit2",
+                    },
+                ],
+            }
+        ]
+    }
+    assert await async_setup_component(hass, DOMAIN, config) is True
+    await hass.async_block_till_done()
+
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    entry = entries[0]
+    assert not entry.subentries
+
+    # No separate hub device; the config entry itself represents the connection.
+    assert (
+        device_registry.async_get_device(identifiers={(DOMAIN, TEST_MODBUS_NAME)})
+        is None
+    )
+
+    # One flat device per slave, directly under the config entry (no nesting).
+    devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    assert sorted(d.name for d in devices) == [
+        f"{TEST_MODBUS_NAME}_unit1",
+        f"{TEST_MODBUS_NAME}_unit2",
+    ]
+    for device in devices:
+        assert device.via_device_id is None
+
+    # Entity ids stay flat (no device-name prefix) and attach to the slave device.
+    assert hass.states.get("sensor.sensor_unit1") is not None
 
 
 @pytest.mark.parametrize(
