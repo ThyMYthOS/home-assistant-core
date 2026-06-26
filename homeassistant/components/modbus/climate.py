@@ -112,7 +112,7 @@ from .const import (
     DataType,
 )
 from .entity import ModbusStructEntity
-from .modbus import ModbusHub, get_hub
+from .modbus import DATA_MODBUS_CONFIG, ModbusHub, get_hub
 from .validators import (
     BASE_STRUCT_SCHEMA,
     duplicate_fan_mode_validator,
@@ -281,10 +281,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus climate entities from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     async_add_entities(
         ModbusThermostat(hass, hub, config)
-        for config in config_entry.data.get(CONF_CLIMATES, [])
+        for config in entity_config.get(CONF_CLIMATES, [])
     )
 
 

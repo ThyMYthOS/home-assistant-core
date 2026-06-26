@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .entity import ModbusToggleEntity
-from .modbus import get_hub
+from .modbus import DATA_MODBUS_CONFIG, get_hub
 from .validators import BASE_SWITCH_SCHEMA
 
 SWITCH_SCHEMA = BASE_SWITCH_SCHEMA.extend(
@@ -32,10 +32,12 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus switches from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     async_add_entities(
         ModbusSwitch(hass, hub, config)
-        for config in config_entry.data.get(CONF_SWITCHES, [])
+        for config in entity_config.get(CONF_SWITCHES, [])
     )
 
 

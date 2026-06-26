@@ -31,7 +31,7 @@ from .const import (
     LIGHT_MODBUS_SCALE_MIN,
 )
 from .entity import ModbusToggleEntity
-from .modbus import ModbusHub, get_hub
+from .modbus import DATA_MODBUS_CONFIG, ModbusHub, get_hub
 from .validators import BASE_SWITCH_SCHEMA
 
 LIGHT_SCHEMA = BASE_SWITCH_SCHEMA.extend(
@@ -52,10 +52,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus lights from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     async_add_entities(
-        ModbusLight(hass, hub, config)
-        for config in config_entry.data.get(CONF_LIGHTS, [])
+        ModbusLight(hass, hub, config) for config in entity_config.get(CONF_LIGHTS, [])
     )
 
 

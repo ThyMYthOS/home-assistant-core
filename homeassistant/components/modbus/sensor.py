@@ -42,7 +42,7 @@ from .const import (
     DEFAULT_SCALE,
 )
 from .entity import ModbusStructEntity
-from .modbus import ModbusHub, get_hub
+from .modbus import DATA_MODBUS_CONFIG, ModbusHub, get_hub
 from .validators import BASE_STRUCT_SCHEMA, nan_validator
 
 SENSOR_SCHEMA = vol.All(
@@ -70,9 +70,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus sensors from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     sensors: list[ModbusRegisterSensor | SlaveSensor] = []
-    for entry in config_entry.data.get(CONF_SENSORS, []):
+    for entry in entity_config.get(CONF_SENSORS, []):
         slave_count = entry.get(CONF_SLAVE_COUNT, None) or entry.get(
             CONF_VIRTUAL_COUNT, 0
         )

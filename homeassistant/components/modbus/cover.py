@@ -28,7 +28,7 @@ from .const import (
     CONF_STATUS_REGISTER_TYPE,
 )
 from .entity import ModbusBaseEntity
-from .modbus import ModbusHub, get_hub
+from .modbus import DATA_MODBUS_CONFIG, ModbusHub, get_hub
 from .validators import BASE_COMPONENT_SCHEMA
 
 COVERS_SCHEMA = BASE_COMPONENT_SCHEMA.extend(
@@ -64,10 +64,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus covers from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     async_add_entities(
-        ModbusCover(hass, hub, config)
-        for config in config_entry.data.get(CONF_COVERS, [])
+        ModbusCover(hass, hub, config) for config in entity_config.get(CONF_COVERS, [])
     )
 
 

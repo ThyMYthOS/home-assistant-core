@@ -73,6 +73,7 @@ from homeassistant.components.modbus.const import (
     DOMAIN,
     RTUOVERTCP,
     SERIAL,
+    SERVICE_RESTART,
     SERVICE_STOP,
     SERVICE_WRITE_COIL,
     SERVICE_WRITE_REGISTER,
@@ -92,6 +93,7 @@ from homeassistant.components.modbus.validators import (
     struct_validator,
 )
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.config_entries import SOURCE_IMPORT
 from homeassistant.const import (
     ATTR_STATE,
     CONF_ADDRESS,
@@ -1348,6 +1350,33 @@ async def test_shutdown(
     await hass.async_block_till_done()
     assert mock_pymodbus.close.called
     assert caplog.text == ""
+
+
+@pytest.mark.parametrize("do_config", [{}])
+async def test_reimport_is_idempotent(hass: HomeAssistant, mock_modbus) -> None:
+    """Re-importing an existing hub (e.g. on restart) updates it in place."""
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": SOURCE_IMPORT},
+        data=dict(entries[0].data),
+    )
+    await hass.async_block_till_done()
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+
+@pytest.mark.parametrize("do_config", [{}])
+async def test_restart_service(hass: HomeAssistant, mock_modbus) -> None:
+    """Run test for the restart service: hub reconnects (close then connect)."""
+    mock_modbus.close.reset_mock()
+    mock_modbus.connect.reset_mock()
+    await hass.services.async_call(
+        DOMAIN, SERVICE_RESTART, {ATTR_HUB: TEST_MODBUS_NAME}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert mock_modbus.close.called
+    assert mock_modbus.connect.called
 
 
 @pytest.mark.parametrize("do_config", [{}])

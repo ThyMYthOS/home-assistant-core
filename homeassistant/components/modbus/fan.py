@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_FANS
 from .entity import ModbusToggleEntity
-from .modbus import ModbusHub, get_hub
+from .modbus import DATA_MODBUS_CONFIG, ModbusHub, get_hub
 from .validators import BASE_SWITCH_SCHEMA
 
 FAN_SCHEMA = BASE_SWITCH_SCHEMA.extend({})
@@ -24,9 +24,11 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up Modbus fans from a config entry."""
-    hub = get_hub(hass, config_entry.data[CONF_NAME])
+    name = config_entry.data[CONF_NAME]
+    hub = get_hub(hass, name)
+    entity_config = hass.data[DATA_MODBUS_CONFIG][name]
     async_add_entities(
-        ModbusFan(hass, hub, config) for config in config_entry.data.get(CONF_FANS, [])
+        ModbusFan(hass, hub, config) for config in entity_config.get(CONF_FANS, [])
     )
 
 

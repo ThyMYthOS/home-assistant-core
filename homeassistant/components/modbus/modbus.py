@@ -55,8 +55,10 @@ from .const import (
     DEFAULT_HUB,
     DEVICE_ID,
     DOMAIN,
+    PLATFORMS,
     RTUOVERTCP,
     SERIAL,
+    SERVICE_RESTART,
     SERVICE_STOP,
     SERVICE_WRITE_COIL,
     SERVICE_WRITE_REGISTER,
@@ -67,6 +69,7 @@ from .const import (
 from .validators import check_config
 
 DATA_MODBUS_HUBS: HassKey[dict[str, ModbusHub]] = HassKey(DOMAIN)
+DATA_MODBUS_CONFIG: HassKey[dict[str, dict]] = HassKey(f"{DOMAIN}_config")
 
 
 def get_hub(hass: HomeAssistant, name: str) -> ModbusHub:
@@ -130,28 +133,55 @@ PB_CALL = [
 ]
 
 
+_ENTITY_CONF_KEYS = frozenset(conf_key for _, conf_key in PLATFORMS)
+
+
 async def async_modbus_setup(
     hass: HomeAssistant,
     config: ConfigType,
 ) -> bool:
-    """Set up Modbus component."""
+    """Reconcile the Modbus config entries with the YAML configuration.
+
+    Entity lists are stored in hass.data so the config entry holds only the
+    connection parameters needed to identify and reconnect to the device.
+    Each YAML hub is (re)imported as a config entry; entries for hubs that
+    are no longer present in the YAML are removed.
+    """
 
     if config[DOMAIN]:
         config[DOMAIN] = check_config(hass, config[DOMAIN])
         if not config[DOMAIN]:
             return False
 
-    if DATA_MODBUS_HUBS not in hass.data:
-        hass.data[DATA_MODBUS_HUBS] = {}
+    yaml_hub_names = {conf_hub[CONF_NAME] for conf_hub in config[DOMAIN]}
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get(CONF_NAME) not in yaml_hub_names:
+            await hass.config_entries.async_remove(entry.entry_id)
 
+    entity_configs: dict[str, dict] = hass.data.setdefault(DATA_MODBUS_CONFIG, {})
     for conf_hub in config[DOMAIN]:
+        name = conf_hub[CONF_NAME]
+        entity_configs[name] = {
+            k: v for k, v in conf_hub.items() if k in _ENTITY_CONF_KEYS
+        }
+        connection_data = {
+            k: v for k, v in conf_hub.items() if k not in _ENTITY_CONF_KEYS
+        }
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
                 context={"source": SOURCE_IMPORT},
-                data=conf_hub,
+                data=connection_data,
             )
         )
+
+    return True
+
+
+def async_setup_services(hass: HomeAssistant) -> None:
+    """Register the Modbus services and shutdown listener once."""
+
+    hass.data.setdefault(DATA_MODBUS_HUBS, {})
 
     async def async_stop_modbus(event: Event) -> None:
         """Stop Modbus service."""
@@ -226,13 +256,22 @@ async def async_modbus_setup(
         hub = hass.data[DATA_MODBUS_HUBS][service.data[ATTR_HUB]]
         await hub.async_close()
 
-    hass.services.async_register(
-        DOMAIN,
-        SERVICE_STOP,
-        async_stop_hub,
-        schema=vol.Schema({vol.Required(ATTR_HUB): cv.string}),
-    )
-    return True
+    async def async_restart_hub(service: ServiceCall) -> None:
+        """Restart Modbus hub."""
+        async_dispatcher_send(hass, SIGNAL_STOP_ENTITY)
+        hub = hass.data[DATA_MODBUS_HUBS][service.data[ATTR_HUB]]
+        await hub.async_restart()
+
+    for service_name, service_func in (
+        (SERVICE_STOP, async_stop_hub),
+        (SERVICE_RESTART, async_restart_hub),
+    ):
+        hass.services.async_register(
+            DOMAIN,
+            service_name,
+            service_func,
+            schema=vol.Schema({vol.Required(ATTR_HUB): cv.string}),
+        )
 
 
 class ModbusHub:
